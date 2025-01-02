@@ -11,183 +11,125 @@
 (function () {
   "use strict";
 
+  // Ensures the browser window gains focus when the script runs.
   window.focus();
 
-  const listenCombination = ({
-    combination,
-    callback,
-    once,
-    element = window,
-  }) => {
-    let combinationMemory = [];
-    let emptyTimeout;
-    let count = 0;
-
-    const onKeyUp = (e) => {
-      combinationMemory = combinationMemory.filter((item) => item !== e.code);
-      emptyTimeout = setTimeout(() => {
-        combinationMemory = [];
-      }, 500);
-    };
-    const onKeyDown = (e) => {
-      clearTimeout(emptyTimeout);
-      if (!combinationMemory.includes(e.code)) {
-        combinationMemory.push(e.code);
+  // Adds custom styles for the download buttons if they haven't been added yet.
+  if (!document.querySelector("style[data-download-image-button-styles]")) {
+    let styles = document.createElement("style");
+    styles.setAttribute("data-download-image-button-styles", "");
+    styles.innerHTML = `
+      [data-download-image-button] {
+        padding: 5px;
+        margin: 5px;
+        cursor: pointer;
+        border-radius: 10px;
+        box-shadow: 0 0 2px rgba(0, 0, 0, 0.3);
       }
-      if (
-        combination.every((item, index) => item === combinationMemory[index])
-      ) {
-        if (once) {
-          element.removeEventListener("keydown", onKeyDown);
-          element.removeEventListener("keyup", onKeyUp);
-        }
-        callback(++count);
+      [data-download-image-button]:hover {
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
       }
-    };
+    `;
+    document.head.appendChild(styles);
+  }
 
-    element.addEventListener("keyup", onKeyUp);
-    element.addEventListener("keydown", onKeyDown);
-  };
-
-  const appendButton = ({
-    width,
-    height,
-    top,
-    left,
-    element,
-    url,
-    fileName,
-  }) => {
+  // Function to create and append a download button to a specified container.
+  const appendButton = (container, url, fileName) => {
     let button = document.createElement("button");
-    let size = 50;
-    let styles;
-    if (!document.querySelector("style[data-download-image-button-styles]")) {
-      styles = document.createElement("style");
-      styles.setAttribute("data-download-image-button-styles", "");
-      styles.innerHTML = `
-				[data-download-image-button] {
-					z-index: 99999;
-					position: absolute;
-					border: none;
-					outline: none;
-					padding: 5px;
-					margin: 0;
-					cursor: pointer;
-					background-color: white;
-					opacity: 0.5;
-					border-radius: 10px;
-					box-shadow: 0 0 0 rgba(0, 0, 0, 0.3);
-					transition: all .2s ease-out;
-                    right: 20px;
-                    bottom: 20px;
-				}
-				[data-download-image-button]:hover {
-					transform: scale(1.2);
-					opacity: 1;
-					box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
-				}
-				[data-download-image-button]:active {
-					transform: scale(1.1);
-					opacity: 1;
-					box-shadow: 0 0 6px rgba(0, 0, 0, 0.3);
-				}
-			`;
-      document.head.appendChild(styles);
-    }
-
     button.innerHTML = "Download";
-    // button.style.top = top + (height / 2) - (size / 2) + "px";
-    // button.style.left = left + (width / 2) - (size / 2) + "px";
     button.setAttribute("data-download-image-button", "");
     button.addEventListener("click", (e) => {
+      // Prevents default action and stops propagation of the click event.
       e.preventDefault();
       e.stopImmediatePropagation();
       e.stopPropagation();
+      // Initiates the file download.
       downloadFile(fileName, url);
     });
-    element.prepend(button);
+    container.appendChild(button); // Adds the button to the specified container.
   };
 
+  // Main function for adding download links and buttons to images.
+  function addDownloadLinks() {
+    // Selector for unprocessed images in the targeted structure.
+    const images = document.querySelectorAll(
+      ".b-feed__wrapper .post_img_block img:not([data-download-added])"
+    );
+
+    images.forEach((img) => {
+      // Marks the image as processed to avoid duplicate buttons.
+      img.setAttribute("data-download-added", "true");
+
+      const url = img.src,
+        fileName = getFileName(img.src); // Extracts the file name from the image URL.
+
+      // Finds the closest parent container for the image.
+      const parentElement = img.closest(".post_img_block");
+      if (parentElement) {
+        const grandParentElement = parentElement.parentElement; // Gets the parent of parentElement.
+
+        // Checks if a .download_buttons element exists immediately after grandParentElement.
+        let downloadContainer = grandParentElement.nextElementSibling;
+        if (
+          !downloadContainer ||
+          !downloadContainer.classList.contains("download_buttons")
+        ) {
+          // Creates the .download_buttons container if it doesn't exist.
+          downloadContainer = document.createElement("div");
+          downloadContainer.classList.add("download_buttons");
+          grandParentElement.after(downloadContainer); // Inserts it immediately after grandParentElement.
+        }
+        // Appends the download button to the container.
+        appendButton(downloadContainer, url, fileName);
+      }
+    });
+  }
+
+  // Converts a URL into a data URL for downloading as a blob object.
   const toDataURL = (url) => {
     return fetch(url)
       .then((response) => {
-        return response.blob();
+        return response.blob(); // Converts the response to a blob object.
       })
       .then((blob) => {
-        return URL.createObjectURL(blob);
+        return URL.createObjectURL(blob); // Generates a local URL for the blob.
       });
   };
 
+  // Downloads a file by creating an anchor tag and simulating a click.
   async function downloadFile(fileName, src) {
     const a = document.createElement("a");
-    a.href = await toDataURL(src);
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    a.href = await toDataURL(src); // Converts the source URL to a downloadable data URL.
+    a.download = fileName; // Sets the file name for the downloaded file.
+    document.body.appendChild(a); // Temporarily adds the anchor to the document.
+    a.click(); // Simulates a click to initiate the download.
+    a.remove(); // Removes the anchor after the download starts.
   }
 
+  // Extracts a file name from a URL or generates a default name for data URLs.
   const getFileName = (url) => {
     if (/^data:image\/([a-zA-Z0-9]+)/.test(url)) {
+      // For data URLs, extracts the file extension and constructs a name.
       let extension = url.match(/^data:image\/([a-zA-Z0-9]+)/);
       return "image." + extension[1];
     } else {
+      // For regular URLs, extracts the file name from the path.
       let match = url.match(/^.*\/(.+?)(\?.+?)?$/);
       if (match && match[1]) {
         return match[1];
       } else {
-        return "image.jpg";
+        return "image.jpg"; // Default file name if extraction fails.
       }
     }
   };
 
-  listenCombination({
-    combination: ["ControlLeft", "KeyQ"],
-    callback: (count) => {
-      if (count % 2 === 0) {
-        Array.from(
-          document.querySelectorAll("[data-download-image-button]")
-        ).forEach((element) => element.remove());
-        return;
-      }
-
-      Array.from(document.querySelectorAll("*:not(img)")).forEach((element) => {
-        if (element.offsetParent) {
-          let computedStyle = getComputedStyle(element);
-          let match = computedStyle.backgroundImage.match(
-            /^url\(['"](.+?)['"]\)/
-          );
-
-          if (match && match[1]) {
-            appendButton({
-              top: element.offsetTop,
-              left: element.offsetLeft,
-              width: element.offsetWidth,
-              height: element.offsetHeight,
-              element: element.offsetParent,
-              url: match[1],
-              fileName: getFileName(match[1]),
-            });
-          }
-        }
-      });
-
-      Array.from(
-        document.querySelectorAll(".b-feed__wrapper .post_img_block img")
-      ).forEach((element) => {
-        if (element.offsetParent) {
-          appendButton({
-            top: element.offsetTop,
-            left: element.offsetLeft,
-            width: element.offsetWidth,
-            height: element.offsetHeight,
-            element: element.offsetParent,
-            url: element.src,
-            fileName: getFileName(element.src),
-          });
-        }
-      });
-    },
-    once: false,
+  // Observes the DOM for dynamically added images and applies download links/buttons.
+  const observer = new MutationObserver(() => {
+    addDownloadLinks();
   });
+
+  observer.observe(document.body, { childList: true, subtree: true }); // Monitors changes in the entire document subtree.
+
+  // Runs the function initially for images already present on the page.
+  addDownloadLinks();
 })();
